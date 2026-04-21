@@ -38,6 +38,15 @@ type Data struct {
 	Contacts []Contact
 }
 
+func (d Data) hasEmail(email string) bool {
+	for _, contact := range d.Contacts {
+		if contact.Email == email {
+			return true
+		}
+	}
+	return false
+}
+
 func newData() Data {
 	return Data{
 		Contacts: []Contact{
@@ -47,23 +56,59 @@ func newData() Data {
 	}
 }
 
+type FormData struct {
+	Values map[string]string
+	Errors map[string]string
+}
+
+func newFormData() FormData {
+	return FormData{
+		Values: make(map[string]string),
+		Errors: make(map[string]string),
+	}
+}
+
+type Page struct {
+	Data Data
+	Form FormData
+}
+
+func newPage() Page {
+	return Page{
+		Data: newData(),
+		Form: newFormData(),
+	}
+}
+
 func main() {
 	e := echo.New()
 	e.Use(middleware.RequestLogger())
 
-	data := newData()
+	page := newPage()
 	e.Renderer = newTemplate()
 
 	e.GET("/", func(c echo.Context) error {
-		return c.Render(200, "index", data)
+		return c.Render(200, "index", page)
 	})
 
 	e.POST("/contacts", func(c echo.Context) error {
 		name := c.FormValue("name")
 		email := c.FormValue("email")
 
-		data.Contacts = append(data.Contacts, newContact(name, email))
-		return c.Render(200, "display", data)
+		if page.Data.hasEmail(email) {
+			formData := newFormData()
+			formData.Values["name"] = name
+			formData.Values["email"] = email
+			formData.Errors["email"] = "Email already exists"
+
+			return c.Render(422, "form", formData)
+		}
+
+		contact := newContact(name, email)
+		page.Data.Contacts = append(page.Data.Contacts, contact)
+
+		c.Render(200, "form", newFormData())
+		return c.Render(200, "oob-contact", contact)
 	})
 
 	e.Logger.Fatal(e.Start(":42069"))
